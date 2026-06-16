@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lifting Tempo</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Sarabun:wght@600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#000;--surface:#111;--border:#2a2a2a;
+    --c-down:#c47c7c;--c-hold:#c9a855;--c-up:#6ba8c4;--c-lift:#6aaa87;
+    --c-count:#555;--white:#ddd;--muted:#777;--teal-msg:hsl(175,35%,52%);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html{background:#000 !important;}
+  body{background:var(--bg) !important;color:var(--white);font-family:'Sarabun',sans-serif;
+    min-height:100vh;display:flex;align-items:center;justify-content:center;padding:0.8rem;}
+  .container{width:min(460px,99vw);text-align:center;}
+
+  .meta-row{display:flex;gap:0.55rem;margin-bottom:0.75rem;}
+  .meta-box{flex:1;background:var(--surface);border:2px solid var(--border);border-radius:14px;padding:0.65rem 0.3rem;}
+  .meta-label{font-size:0.95rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.1rem;}
+  .meta-value{font-family:'Bebas Neue',cursive;font-size:2rem;line-height:1;}
+  .v-round{color:var(--white);}
+  .v-set{color:var(--white);white-space:nowrap;overflow:hidden;line-height:1.1;}
+  .v-rep{color:var(--white);}
+
+  .timer-wrap{position:relative;width:300px;height:300px;margin:0 auto 0.75rem;}
+  .timer-inner{position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:0.05rem;}
+  .phase-label{font-size:3.5rem;font-weight:800;letter-spacing:0.15em;
+    text-transform:uppercase;line-height:1;transition:color 0.2s;}
+  .timer-number{font-family:'Bebas Neue',cursive;font-size:8.5rem;line-height:1;transition:color 0.2s;}
+  .phase-icon{font-size:0rem;line-height:1;}
+
+  .time-row{display:flex;gap:0.55rem;margin-bottom:0.85rem;}
+  .time-box{flex:1;background:var(--surface);border:2px solid var(--border);border-radius:14px;padding:0.6rem 0.3rem;}
+  .time-label{font-size:0.95rem;font-weight:600;color:var(--muted);margin-bottom:0.1rem;}
+  .time-value{font-family:'Bebas Neue',cursive;font-size:1.9rem;line-height:1;}
+
+  .btn-row{display:flex;gap:0.7rem;}
+  .btn-row2{display:flex;gap:0.7rem;margin-top:0.6rem;}
+  .btn{font-family:'Sarabun',sans-serif;font-size:1.2rem;font-weight:800;border:none;
+    border-radius:14px;padding:1rem 1.5rem;cursor:pointer;transition:filter 0.15s,transform 0.1s;}
+  .btn-start{background:transparent;color:var(--muted);border:2px solid #333;flex:1;}
+  .btn-start:active{border-color:#888;color:var(--white);}
+  .btn-reset{background:transparent;color:var(--muted);border:2px solid #333;min-width:90px;font-size:1.1rem;}
+  .btn-reset:active{border-color:#888;color:var(--white);}
+  .btn-sec{background:transparent;color:var(--muted);border:2px solid #2a2a2a;flex:1;font-size:1rem;}
+  .btn-sec:active{border-color:#666;color:var(--white);}
+  .btn-sec:disabled{opacity:0.25;cursor:default;}
+
+  .done-screen{display:none;flex-direction:column;align-items:center;gap:1.2rem;}
+  .done-screen.show{display:flex;}
+  .done-title{font-family:'Bebas Neue',cursive;font-size:6rem;color:var(--c-hold);
+    text-shadow:0 0 40px rgba(255,230,0,0.7);line-height:1;}
+  .done-msg{font-size:1.7rem;font-weight:800;}
+  .done-sub{font-size:1.1rem;color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="container" id="mainScreen">
+
+  <div class="meta-row">
+    <div class="meta-box"><div class="meta-label">Round</div><div class="meta-value v-round" id="dRound">1 / 6</div></div>
+    <div class="meta-box"><div class="meta-label" id="dayLabel">Day</div><div class="meta-value v-set" id="dSet">SQUAT</div></div>
+    <div class="meta-box"><div class="meta-label">Rep</div><div class="meta-value v-rep" id="dRep">1 / 10</div></div>
+  </div>
+
+<script>
+  (function(){
+    const days = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+    document.getElementById('dayLabel').textContent = days[new Date().getDay()];
+  })();
+</script>
+
+  <div class="timer-wrap">
+    <canvas id="ringCanvas" width="300" height="300" style="position:absolute;inset:0;"></canvas>
+    <div class="timer-inner">
+      <div class="phase-label" id="phLabel">Ready</div>
+      <div class="timer-number" id="timerNum">—</div>
+      <div class="phase-icon"   id="phIcon">💪</div>
+    </div>
+  </div>
+
+  <div class="time-row">
+    <div class="time-box"><div class="time-label">Remaining</div><div class="time-value" id="tCountdown" style="color:var(--white)">—</div></div>
+    <div class="time-box"><div class="time-label">Elapsed</div>  <div class="time-value" id="tElapsed"   style="color:var(--white)">00:00</div></div>
+    <div class="time-box"><div class="time-label">Progress</div> <div class="time-value" id="progressPct" style="color:var(--white)">0%</div></div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-start" id="startBtn" onclick="toggleStart()">▶ Start</button>
+    <button class="btn btn-reset" onclick="resetAll()">↺ Reset</button>
+  </div>
+  <div class="btn-row2">
+    <button class="btn btn-sec" id="restartSetBtn" onclick="restartSet()" disabled>↩ Restart Set</button>
+    <button class="btn btn-sec" id="nextSetBtn" onclick="nextSet()" disabled>Skip Set ↪</button>
+  </div>
+</div>
+
+<div class="container done-screen" id="doneScreen">
+  <div class="done-title">DONE! 🔥</div>
+  <div class="done-msg">Amazing work!</div>
+  <div class="done-sub">All 4 rounds complete! 💪</div>
+  <div class="done-sub" style="color:hsl(175,35%,52%);margin-top:0.3rem;">⌚ Don't forget to end the workout app on your watch.</div>
+  <button class="btn btn-reset" style="margin-top:0.5rem;width:100%" onclick="resetAll()">↺ Restart</button>
+</div>
+
+<script>
+// ── CONFIG ─────────────────────────────────────────
+const TOTAL_ROUNDS = 4;
+const TOTAL_REPS   = 10;
+const REST_SEC     = 30;
+const COOLDOWN_SEC = 60;
+const COUNT_WORDS  = ['one','two','three','four','five','six','seven','eight','nine','ten'];
+const MAX_SEGS     = 40;
+const SET_NAMES    = ['SQUAT', 'SHOULDER PRESS', 'HIP KICKBACK', 'BICEP CURL'];
+
+/*
+  RING DRAWING with Canvas:
+  - 40 segments, each = 9° = π/20 radians
+  - 1 segment per phase (2 seconds each): DOWN, HOLD, UP/LIFT, COUNT
+  - Full ring = 1 set (40 × 2s = 80s)
+  - Both sets start at 12 o'clock (−π/2)
+*/
+
+const CX = 150, CY = 150, R = 128, SW = 16;
+const SEG = Math.PI / 20;
+const SET_START_ANGLE = [-Math.PI/2, -Math.PI/2, -Math.PI/2, -Math.PI/2];
+
+const PHASE_COLOR = {
+  down:'#c47c7c', hold:'#c9a855', up:'#6ba8c4',
+  lift:'#6aaa87', count:'#555',   rest:'#444'
+};
+
+// 40 teal-gradient segments
+const GREY_SEGS = Array.from({length:40}, (_,i) => {
+  const t = i / 39;
+  const light = 30 + t * 45;
+  return `hsl(175, 35%, ${light}%)`;
+});
+
+const SET_SEG_COLORS = [ GREY_SEGS, GREY_SEGS, GREY_SEGS, GREY_SEGS ];
+
+const SETS = [
+  { name:'Squat', phases: [
+    { lbl:'DOWN', key:'down', vox:'Down', dur:2 },
+    { lbl:'HOLD', key:'hold', vox:'Hold', dur:2 },
+    { lbl:'UP',   key:'up',   vox:'Up',   dur:2 },
+    { lbl:'',     key:'count',vox:null,   dur:2 },
+  ]},
+  { name:'Shoulder Press', phases: [
+    { lbl:'LIFT', key:'lift', vox:'Lift', dur:2 },
+    { lbl:'HOLD', key:'hold', vox:'Hold', dur:2 },
+    { lbl:'DOWN', key:'down', vox:'Down', dur:2 },
+    { lbl:'',     key:'count',vox:null,   dur:2 },
+  ]},
+  { name:'Hip Kickback', phases: [
+    { lbl:'KICK', key:'lift', vox:'Kick', dur:2 },
+    { lbl:'HOLD', key:'hold', vox:'Hold', dur:2 },
+    { lbl:'DOWN', key:'down', vox:'Down', dur:2 },
+    { lbl:'',     key:'count',vox:null,   dur:2 },
+  ]},
+  { name:'Bicep Curl', phases: [
+    { lbl:'LIFT', key:'lift', vox:'Lift', dur:2 },
+    { lbl:'HOLD', key:'hold', vox:'Hold', dur:2 },
+    { lbl:'DOWN', key:'down', vox:'Down', dur:2 },
+    { lbl:'',     key:'count',vox:null,   dur:2 },
+  ]}
+];
+
+/*
+  FIX: Correct TOTAL_SEC calculation
+  - Each set = TOTAL_REPS × 4 phases × 2s = 80s
+  - Rests: (SETS.length × TOTAL_ROUNDS) - 1 rests total
+    (no rest after the very last set of last round — goes to cooldown instead)
+  - Plus COOLDOWN_SEC
+  - Plus ANNOUNCE_SEC (intro speech before first set)
+*/
+const ANNOUNCE_SEC = 20; // intro announcement duration
+const SETS_PER_ROUND = SETS.length;
+const TOTAL_SETS = SETS_PER_ROUND * TOTAL_ROUNDS;
+const TOTAL_RESTS = TOTAL_SETS - 1; // no rest after final set
+
+const TOTAL_SEC = (TOTAL_SETS * TOTAL_REPS * 4 * 2)  // all exercise time
+  + (TOTAL_RESTS * REST_SEC)            // all rest periods
+  + COOLDOWN_SEC;                       // cooldown
+
+// ── STATE ──────────────────────────────────────────
+let round=1, set=0, rep=0, phIdx=0;
+let secLeft=0, totSec=0;
+let running=false, resting=false, coolingDown=false;
+let ticker=null, elapsed=0;
+let segIdx=0;
+let announcing=false;
+let announceTimer=null;
+
+function safeSegIdx(n){ return Math.min(Math.max(0,n), MAX_SEGS-1); }
+
+// ── CANVAS ─────────────────────────────────────────
+const canvas = document.getElementById('ringCanvas');
+const ctx2d  = canvas.getContext('2d');
+
+function drawRing(segsCompleted, currentSegProgress, countMode, restMode, restProgress) {
+  ctx2d.clearRect(0, 0, 300, 300);
+
+  // background track
+  ctx2d.beginPath();
+  ctx2d.arc(CX, CY, R, 0, Math.PI * 2);
+  ctx2d.strokeStyle = '#1a1a1a';
+  ctx2d.lineWidth = SW;
+  ctx2d.lineCap = 'butt';
+  ctx2d.stroke();
+
+  if (restMode) {
+    const endAngle = -Math.PI/2 + Math.PI*2 * Math.max(0, Math.min(1, restProgress));
+    ctx2d.beginPath();
+    ctx2d.arc(CX, CY, R, -Math.PI/2, endAngle);
+    ctx2d.strokeStyle = '#7a90aa';
+    ctx2d.lineWidth = SW;
+    ctx2d.lineCap = 'butt';
+    ctx2d.stroke();
+    return;
+  }
+
+  const startAngle = SET_START_ANGLE[set];
+  const colors = SET_SEG_COLORS[set];
+  const GAP = 0.018;
+
+  for (let i = 0; i < segsCompleted; i++) {
+    const a0 = startAngle + i * SEG + GAP / 2;
+    const a1 = startAngle + (i + 1) * SEG - GAP / 2;
+    ctx2d.beginPath();
+    ctx2d.arc(CX, CY, R, a0, a1);
+    ctx2d.strokeStyle = colors[i];
+    ctx2d.lineWidth = SW;
+    ctx2d.lineCap = 'butt';
+    ctx2d.stroke();
+  }
+
+  if (segsCompleted < MAX_SEGS && currentSegProgress > 0) {
+    const a0 = startAngle + segsCompleted * SEG + GAP / 2;
+    const a1 = a0 + (SEG - GAP) * Math.min(1, currentSegProgress);
+    if (a1 > a0) {
+      ctx2d.beginPath();
+      ctx2d.arc(CX, CY, R, a0, a1);
+      ctx2d.strokeStyle = colors[segsCompleted] || '#888';
+      ctx2d.lineWidth = SW;
+      ctx2d.lineCap = 'butt';
+      ctx2d.stroke();
+    }
+  }
+}
+
+// ── AUDIO ──────────────────────────────────────────
+const actx = new (window.AudioContext||window.webkitAudioContext)();
+function beep(f=880,d=0.08,v=0.3){
+  try{
+    if(actx.state==='suspended') actx.resume();
+    const o=actx.createOscillator(),g=actx.createGain();
+    o.connect(g);g.connect(actx.destination);
+    o.frequency.value=f;
+    g.gain.setValueAtTime(v,actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,actx.currentTime+d);
+    o.start();o.stop(actx.currentTime+d);
+  }catch(e){}
+}
+function beepTick(){beep(400,0.04,0.15);}
+function beepDone(){beep(880,0.08);setTimeout(()=>beep(1100,0.12),100);}
+
+/*
+  FIX: Unified speak() with optional delay and queue control.
+  - cancelFirst=true  → cancel any current speech then speak (default for cues)
+  - cancelFirst=false → queue behind current speech (for countdown chaining)
+  All speak functions now route through here to avoid the old fragmented cancel logic.
+*/
+function speak(txt, { delay=0, cancel=true, rate=0.88, pitch=1.05 }={}){
+  if(!window.speechSynthesis || !txt) return;
+  const fire = () => {
+    if(cancel) window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(txt);
+    u.lang='en-US'; u.rate=rate; u.pitch=pitch; u.volume=1;
+    window.speechSynthesis.speak(u);
+  };
+  if(delay > 0) setTimeout(fire, delay);
+  else fire();
+}
+
+// Convenience wrappers for readability
+function speakCue(txt)         { speak(txt); }
+function speakQueue(txt)       { speak(txt, { cancel:false, rate:1.1 }); }
+function speakSlow(txt, delay=0) { speak(txt, { delay, cancel:false, rate:0.85 }); }
+function speakNormal(txt)      { speak(txt, { rate:1.0 }); }
+
+// ── DOM ────────────────────────────────────────────
+const numEl = document.getElementById('timerNum');
+const lblEl = document.getElementById('phLabel');
+const icoEl = document.getElementById('phIcon');
+
+function fmt(s){return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
+
+function timers(){
+  document.getElementById('tCountdown').textContent=fmt(Math.max(0,TOTAL_SEC-elapsed));
+  document.getElementById('tElapsed').textContent=fmt(elapsed);
+  const pct = Math.min(100, Math.round(elapsed / TOTAL_SEC * 100));
+  document.getElementById('progressPct').textContent = pct + '%';
+}
+
+function meta(){
+  document.getElementById('dRound').textContent=round+' / '+TOTAL_ROUNDS;
+  document.getElementById('dRep').textContent=(rep+1)+' / '+TOTAL_REPS;
+  const setEl = document.getElementById('dSet');
+  const name = SET_NAMES[set];
+  setEl.textContent = name;
+  if(name.length <= 5)       setEl.style.fontSize = '2rem';
+  else if(name.length <= 8)  setEl.style.fontSize = '1.5rem';
+  else if(name.length <= 11) setEl.style.fontSize = '1.15rem';
+  else                       setEl.style.fontSize = '0.95rem';
+}
+
+function setRestMeta(){
+  const nextSet = (set + 1) % SETS.length;
+  const name = SET_NAMES[nextSet];
+  const setEl = document.getElementById('dSet');
+  document.getElementById('dayLabel').textContent = 'NEXT';
+  setEl.textContent = name;
+  if(name.length <= 5)       setEl.style.fontSize = '2rem';
+  else if(name.length <= 8)  setEl.style.fontSize = '1.5rem';
+  else if(name.length <= 11) setEl.style.fontSize = '1.15rem';
+  else                       setEl.style.fontSize = '0.95rem';
+}
+
+function restoreMetaLabel(){
+  const days = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+  document.getElementById('dayLabel').textContent = days[new Date().getDay()];
+}
+
+function setColors(color){
+  lblEl.style.color=color;
+  numEl.style.color=color;
+}
+
+// ── ANIMATION STATE ────────────────────────────────
+let animFrame = null;
+let animSegIdx = 0;
+let tickStart = 0;
+
+function stopAnim(){
+  if(animFrame){ cancelAnimationFrame(animFrame); animFrame=null; }
+}
+
+function animLoop(ts, expectedSegIdx){
+  if(!running || resting || announcing || coolingDown) return;
+  const ph = SETS[set]?.phases[phIdx];
+  if(!ph) return;
+  if(segIdx !== expectedSegIdx) return;
+  const secondsDone = ph.dur - secLeft;
+  const subSec = Math.min(1, (ts - tickStart) / 1000);
+  const progress = Math.min(1, (secondsDone + subSec) / ph.dur);
+  drawRing(safeSegIdx(segIdx), progress, false, false, 0);
+  animFrame = requestAnimationFrame(ts2 => animLoop(ts2, expectedSegIdx));
+}
+
+function startSegmentAnim(){
+  stopAnim();
+  const ph = SETS[set]?.phases[phIdx];
+  if(!ph || resting || announcing || coolingDown) return;
+  animSegIdx = segIdx;
+  tickStart = performance.now();
+  animFrame = requestAnimationFrame(ts => animLoop(ts, segIdx));
+}
+
+function tickWithAnim(){
+  stopAnim();
+  tickStart = performance.now();
+  tick();
+  if(running && !resting && !announcing){
+    const ph2 = SETS[set]?.phases[phIdx];
+    if(ph2){
+      animSegIdx = segIdx;
+      animFrame = requestAnimationFrame(ts => animLoop(ts, segIdx));
+    }
+  }
+}
+
+// ── CORE ───────────────────────────────────────────
+function tick(){
+  if(announcing) return; // safety guard — don't advance while intro speech is playing
+  secLeft--; elapsed++;
+
+  if(coolingDown){
+    numEl.textContent = secLeft > 0 ? secLeft : '';
+    numEl.style.fontSize='7rem';
+    drawRing(0, 0, false, true, Math.max(0, secLeft / totSec));
+
+    if(secLeft === 50) speakSlow('Stand tall, reach both arms up and stretch. Hold for 10 seconds.');
+    if(secLeft === 38) speakSlow('Now, gently tuck your chin in toward your chest. Hold, and release. Repeat slowly.');
+    if(secLeft === 25) speakSlow('Shrug both shoulders up to your ears, hold... and release. Let all the tension go.');
+    if(secLeft === 12) speakSlow('Finally, give yourself a big hug — cross your arms over your chest and breathe. You take care of yourself today, and every session like this builds a longer, healthier life. You deserve this.');
+
+    timers();
+    if(secLeft <= 3 && secLeft > 0) beepTick();
+    if(secLeft <= 0){ beepDone(); finish(); }
+    return;
+  }
+
+  if(resting){
+    const restProgress = Math.max(0, secLeft / totSec);
+    numEl.textContent = secLeft > 0 ? secLeft : '';
+    numEl.style.fontSize='7rem';
+    drawRing(0, 0, false, true, restProgress);
+
+    const elapsed_in_rest = totSec - secLeft;
+    if(elapsed_in_rest === 20){
+      if(set === 0){
+        speakSlow('Get your dumbbells ready for Shoulder Press.');
+      } else if(set === 1){
+        speakSlow('Please tap the screen.');
+        speakSlow('Hip Kickback next — stand tall, engage your glutes. Ready!', 2000);
+      } else if(set === 2){
+        speakSlow('Get your dumbbells ready for Bicep Curls.');
+      } else if(set === 3){
+        speakSlow('Please tap the screen.');
+        speakSlow(`Squats coming up — feet shoulder-width apart, core tight. Let's go!`, 2000);
+      }
+    }
+  }
+
+  timers();
+  if(secLeft <= 3 && secLeft > 0) beepTick();
+  if(secLeft <= 0){ beepDone(); advance(); }
+}
+
+function advance(){
+  if(coolingDown){ finish(); return; }
+  if(resting){ resting=false; restoreMetaLabel(); endSet(); return; }
+  segIdx = Math.min(segIdx + 1, MAX_SEGS);
+  phIdx++;
+  if(phIdx >= SETS[set].phases.length){
+    phIdx = 0; rep++;
+    if(rep >= TOTAL_REPS){
+      rep=0; phIdx=0;
+      const isLastSet = (set === SETS.length - 1);
+      const isLastRound = (round === TOTAL_ROUNDS);
+      if(isLastSet && isLastRound){
+        startCooldown();
+      } else {
+        startRest();
+      }
+      return;
+    }
+  }
+  startPhase();
+}
+
+// ── ANNOUNCEMENT before workout ────────────────────
+/*
+  FIX: Instead of hardcoded setTimeout(17000) for speech length,
+  we use the SpeechSynthesisUtterance onend event to know exactly
+  when speech finishes, then do the 3-2-1 countdown cleanly.
+  Total announce window is still ANNOUNCE_SEC (20s) for elapsed tracking.
+*/
+function announceAndStart(){
+  lblEl.textContent = 'ROUND ' + round;
+  lblEl.style.fontSize = '2.5rem';
+  lblEl.style.letterSpacing = '0.12em';
+  numEl.textContent = SETS[set].name.toUpperCase();
+  numEl.style.fontSize = '3rem';
+  numEl.style.color = 'var(--teal-msg)';
+  icoEl.textContent = '';
+  drawRing(0, 0, false, false, 0);
+  meta();
+
+  announcing = true;
+  window.speechSynthesis.cancel();
+
+  const introText = `Hello Paula! Let's get ready to work. Today we have 4 rounds of Squats, Shoulder Press, Hip Kickback, and Bicep Curls. Please prepare your water, cooling fan, and dumbbells — and don't forget to start your fitness app on your watch. Let's go!`;
+  const intro = new SpeechSynthesisUtterance(introText);
+  intro.lang='en-US'; intro.rate=1.0; intro.pitch=1.05; intro.volume=1;
+
+  intro.onend = () => {
+    // After intro speech ends naturally, do 3-2-1 with queuing
+    const u3 = new SpeechSynthesisUtterance('3');
+    u3.lang='en-US'; u3.rate=1.1; u3.pitch=1.05; u3.volume=1;
+    const u2 = new SpeechSynthesisUtterance('2');
+    u2.lang='en-US'; u2.rate=1.1; u2.pitch=1.05; u2.volume=1;
+    const u1 = new SpeechSynthesisUtterance('1');
+    u1.lang='en-US'; u1.rate=1.1; u1.pitch=1.05; u1.volume=1;
+
+    u1.onend = () => {
+      if(announceTimer){ clearTimeout(announceTimer); announceTimer=null; }
+      if(running){
+        announcing = false;
+        clearInterval(ticker); // always clear before creating new interval
+        startPhase();
+        startSegmentAnim();
+        ticker = setInterval(tickWithAnim, 1000);
+      }
+    };
+
+    window.speechSynthesis.speak(u3);
+    window.speechSynthesis.speak(u2);
+    window.speechSynthesis.speak(u1);
+  };
+
+  window.speechSynthesis.speak(intro);
+
+  // Safety fallback: if speech never fires onend (e.g. suspended TTS),
+  // start after ANNOUNCE_SEC anyway
+  announceTimer = setTimeout(()=>{
+    if(!announcing) return;
+    announcing = false;
+    announceTimer = null;
+    if(running){
+      clearInterval(ticker); // always clear before creating new interval
+      startPhase();
+      startSegmentAnim();
+      ticker = setInterval(tickWithAnim, 1000);
+    }
+  }, ANNOUNCE_SEC * 1000);
+}
+
+function startPhase(){
+  stopAnim();
+  const ph = SETS[set].phases[phIdx];
+  totSec = secLeft = ph.dur;
+  meta();
+
+  if(ph.key==='count'){
+    lblEl.textContent='';
+    lblEl.style.fontSize='2rem';
+    icoEl.textContent='';
+    numEl.textContent=(rep+1);
+    numEl.style.fontSize='5.5rem';
+    numEl.style.color='#777';
+    setColors('#777');
+    drawRing(safeSegIdx(segIdx), 0, false, false, 0);
+    speakCue(COUNT_WORDS[rep]||String(rep+1));
+    if(running) startSegmentAnim();
+  } else {
+    lblEl.textContent=ph.lbl;
+    lblEl.style.fontSize='3.5rem';
+    lblEl.style.letterSpacing='0.1em';
+    icoEl.textContent='';
+    numEl.textContent='';
+    numEl.style.fontSize='0';
+    setColors(PHASE_COLOR[ph.key]);
+    drawRing(safeSegIdx(segIdx), 0, false, false, 0);
+    speakCue(ph.vox);
+    if(running) startSegmentAnim();
+  }
+}
+
+function startRest(){
+  stopAnim();
+  resting=true;
+  totSec=secLeft=REST_SEC;
+  lblEl.textContent='REST';
+  lblEl.style.fontSize='2.5rem';
+  lblEl.style.letterSpacing='0.15em';
+  icoEl.textContent='';
+  numEl.textContent=secLeft;
+  numEl.style.fontSize='7rem';
+  setColors('#7a90aa');
+  drawRing(0,0,false,true,1);
+  setRestMeta();
+
+  // FIX: Use speakCue (cancel=true) then speakSlow (cancel=false, queued) for clean sequencing
+  if(set === 0){
+    speakCue('Rest.');
+  } else if(set === 1){
+    speakCue('Rest. Put your dumbbells down.');
+  } else if(set === 2){
+    speakCue('Rest.');
+  } else if(set === 3){
+    speakCue('Put your dumbbell down, and rest.');
+    if(round === 1)      speakSlow(`That's round one done! Strong start Paula — that's exactly the energy we need. Keep it up!`, 2000);
+    else if(round === 2) speakSlow(`Round two complete! You're halfway there. Stay focused, breathe, and let's finish strong!`, 2000);
+    else if(round === 3) speakSlow(`Round three down! One more round to go Paula — dig deep, you've got this!`, 2000);
+  }
+}
+
+function startCooldown(){
+  stopAnim();
+  coolingDown=true;
+  totSec=secLeft=COOLDOWN_SEC;
+  lblEl.textContent='COOLDOWN';
+  lblEl.style.fontSize='2rem';
+  lblEl.style.letterSpacing='0.12em';
+  icoEl.textContent='';
+  numEl.textContent=secLeft;
+  numEl.style.fontSize='7rem';
+  setColors('#6aaa87');
+  drawRing(0,0,false,true,1);
+  document.getElementById('dayLabel').textContent='COOL';
+  document.getElementById('dSet').textContent='DOWN';
+  speakCue('Put your dumbbells down.');
+  speakSlow('Amazing work! Time to cool down.', 2000);
+}
+
+function endSet(){
+  set++;
+  if(set >= SETS.length){ set=0; round++; if(round > TOTAL_ROUNDS){ finish(); return; } }
+  rep=0; phIdx=0; segIdx=0;
+  meta();
+  startPhase();
+}
+
+function finish(){
+  stopAnim();
+  clearInterval(ticker); running=false;
+  speakNormal(`Well done Paula! You crushed every single set today — be proud of yourself. Don't forget to stop your fitness app on your watch. Remember to take your medication, stay hydrated, and rest well. Your body is getting stronger every time. See you next session!`);
+  document.getElementById('mainScreen').style.display='none';
+  document.getElementById('doneScreen').classList.add('show');
+}
+
+// ── CONTROLS ───────────────────────────────────────
+const startBtn = document.getElementById('startBtn');
+function setBtnState(state){
+  if(state==='start'){
+    startBtn.textContent='▶ Start';
+  } else if(state==='pause'){
+    startBtn.textContent='⏸ Pause';
+  } else {
+    startBtn.textContent='▶ Resume';
+  }
+  startBtn.style.background='';
+  startBtn.style.color='';
+}
+
+function toggleStart(){
+  if(actx.state==='suspended') actx.resume();
+  if(!running){
+    running=true;
+    setBtnState('pause');
+    updateSecBtns();
+    if(numEl.textContent==='—'){
+      set=0; round=1; rep=0; phIdx=0; segIdx=0; elapsed=0;
+      meta();
+      // Do NOT start ticker yet — announceAndStart() will start it after countdown
+      announceAndStart();
+    } else {
+      if(!announcing) startSegmentAnim();
+      ticker = setInterval(tickWithAnim, 1000);
+    }
+  } else {
+    running=false;
+    clearInterval(ticker);
+    stopAnim();
+    window.speechSynthesis?.cancel();
+    if(announceTimer){ clearTimeout(announceTimer); announceTimer=null; announcing=false; }
+    setBtnState('resume');
+    updateSecBtns();
+  }
+}
+
+function updateSecBtns(){
+  const active = running && !announcing;
+  document.getElementById('restartSetBtn').disabled = !active;
+  document.getElementById('nextSetBtn').disabled = !active;
+}
+
+function restartSet(){
+  if(!running || announcing) return;
+  window.speechSynthesis?.cancel();
+  clearInterval(ticker);
+  stopAnim();
+  resting=false; coolingDown=false;
+  rep=0; phIdx=0; segIdx=0;
+  startPhase();
+  ticker = setInterval(tickWithAnim, 1000);
+}
+
+/*
+  FIX: nextSet() now adds the skipped time to elapsed so
+  countdown/progress bar stay accurate.
+*/
+function nextSet(){
+  if(!running || announcing) return;
+  window.speechSynthesis?.cancel();
+  clearInterval(ticker);
+  stopAnim();
+
+  // Count remaining seconds in current phase/rest/cooldown as elapsed
+  if(secLeft > 0) elapsed += secLeft;
+
+  resting=false; coolingDown=false;
+  const isLastSet = (set === SETS.length - 1);
+  const isLastRound = (round === TOTAL_ROUNDS);
+  if(isLastSet && isLastRound){
+    startCooldown();
+    ticker = setInterval(tickWithAnim, 1000);
+  } else {
+    rep=0; phIdx=0; segIdx=0;
+    endSet();
+    ticker = setInterval(tickWithAnim, 1000);
+  }
+  timers();
+}
+
+function resetAll(){
+  clearInterval(ticker);
+  if(announceTimer){ clearTimeout(announceTimer); announceTimer=null; }
+  stopAnim();
+  window.speechSynthesis?.cancel();
+  running=false; resting=false; announcing=false; coolingDown=false;
+  round=1; set=0; rep=0; phIdx=0; elapsed=0; segIdx=0;
+  numEl.textContent='—';
+  numEl.style.fontSize='8.5rem';
+  lblEl.textContent='Ready';
+  lblEl.style.fontSize='3.5rem';
+  icoEl.textContent='💪';
+  setColors('#555');
+  ctx2d.clearRect(0,0,300,300);
+  ctx2d.beginPath(); ctx2d.arc(CX,CY,R,0,Math.PI*2);
+  ctx2d.strokeStyle='#1a1a1a'; ctx2d.lineWidth=SW; ctx2d.stroke();
+  restoreMetaLabel();
+  meta(); timers();
+  document.getElementById('tCountdown').textContent=fmt(TOTAL_SEC);
+  setBtnState('start');
+  updateSecBtns();
+  document.getElementById('mainScreen').style.display='block';
+  document.getElementById('doneScreen').classList.remove('show');
+}
+
+// ── INIT ───────────────────────────────────────────
+meta();
+ctx2d.beginPath(); ctx2d.arc(CX,CY,R,0,Math.PI*2);
+ctx2d.strokeStyle='#1a1a1a'; ctx2d.lineWidth=SW; ctx2d.stroke();
+document.getElementById('tCountdown').textContent=fmt(TOTAL_SEC);
+document.getElementById('tElapsed').textContent='00:00';
+</script>
+</body>
+</html>
